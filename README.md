@@ -1,14 +1,15 @@
 # gemma-rpi-agent
 
-A Telegram bot that streams responses from a local **Gemma 4** model running via [llama.cpp](https://github.com/ggerganov/llama.cpp)'s OpenAI-compatible HTTP server on a Raspberry Pi, **plus an FSRS-driven English-vocabulary agent** that sends short tone-flavoured push messages using your saved words and tracks per-word memory state via rating buttons.
+A multimodal Telegram bot that streams responses from a local **Gemma 4 E2B-It** model running via [llama.cpp](https://github.com/ggerganov/llama.cpp)'s OpenAI-compatible HTTP server on a Raspberry Pi.
 
-Chat replies are streamed live by editing a placeholder message; the footer of each reply shows current CPU load and temperature. Scheduled pushes use a non-streaming one-shot call.
+Send the bot **text**, a **photo**, or a **voice note** — replies stream live by editing a placeholder message.
 
 ## Requirements
 
-- Raspberry Pi (tested on RPi with 64-bit kernel)
+- Raspberry Pi (tested on a Pi 4 with 64-bit kernel)
 - Python 3.10+
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) server running with a Gemma 4 model on `http://127.0.0.1:8080`
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) server running Gemma 4 with **`--mmproj`** loaded so `/props` reports `vision: true, audio: true`
+- `ffmpeg` on PATH for voice support (`apt install ffmpeg`)
 - A Telegram bot token from [@BotFather](https://t.me/BotFather)
 
 ## Setup
@@ -20,7 +21,7 @@ pip install -r requirements.txt
 cp .env.example .env   # then fill in TELEGRAM_TOKEN
 ```
 
-For running tests: `pip install -r requirements-dev.txt && python -m pytest -q`.
+For tests: `pip install -r requirements-dev.txt && python -m pytest -q`.
 
 ## Running manually
 
@@ -37,9 +38,7 @@ The llama.cpp server must be running before starting the bot.
 sudo bash install-service.sh
 ```
 
-This copies `gemma-rpi-agent.service` to `/etc/systemd/system/`, enables it on boot, and starts it immediately.
-
-Useful commands:
+This copies `gemma-rpi-agent.service` to `/etc/systemd/system/`, enables it on boot, and starts it.
 
 ```bash
 systemctl status gemma-rpi-agent
@@ -52,28 +51,20 @@ systemctl restart gemma-rpi-agent
 | Variable | Required | Default |
 |---|---|---|
 | `TELEGRAM_TOKEN` | Yes | — |
-| `SYSTEM_PROMPT` | No | `"You are a friendly English tutor chatting casually with a learner. Use natural, everyday English. If they ask about grammar, vocabulary, or usage, explain briefly with a small example."` |
+| `SYSTEM_PROMPT` | No | `"You are a helpful assistant. Reply concisely in plain text."` |
 | `ALLOWED_USER_IDS` | No | empty (allow all) |
-
-Per-chat scheduling settings (timezone, pushes/day, active window, tone) are collected via the `/start` flow and stored in SQLite at `data/vocab.db` — not via env vars.
 
 ## Bot commands
 
 | Command | Description |
 |---|---|
-| `/start` | Walks a guided config: timezone → pushes/day (6–12) → active window (HH:MM) → tone (funny/motivational/scary/bright/mixed) → target language for `/translate`. Re-running overwrites settings; vocab is preserved. |
-| `/clear` | Resets the chat's LLM history. Vocab and settings untouched. |
-| `/add <word or phrase>` | Add a word to this chat's vocab. |
-| `/remove <word or phrase>` | Remove a word. |
-| `/list [substring]` | List vocab (least-mentioned first), optionally filtered by substring. |
-| `/resetvocab` | Wipe the chat's vocabulary (with a confirm button). |
-| `/translate <text>` | Google-translate the args (or the replied message) into your chat's target language. If the input is written in the target's script (e.g. Cyrillic for `ru`), reverse-translates it to English instead and adds the English result to your vocab (up to 5 words; shows `already in vocab` on duplicates, `not added (N words)` when too long). Runs outside the LLM. |
-| `/status` | Show host diagnostics (hardware, OS, load, temp, disk free), vocab count, llama.cpp endpoint/health, and a short model bench. |
+| `/start` | Show the welcome / help message. |
+| `/help` | Same as `/start`. |
+| `/clear` | Reset the chat history (LLM memory) and start a new transcript file. |
+| `/status` | Show host diagnostics, llama.cpp endpoint/health/modalities, and a short bench. |
 
-Plain-text messages go to the chat model with your vocab injected into the system prompt as soft hints. Words that appear literally in the reply bump their mention count.
-
-Scheduled pushes arrive inside your active window at randomized times. Each carries `✅ knew / ❌ forgot` buttons that apply FSRS `Good` or `Again` ratings to the highlighted word.
+Plain text, photos (with optional caption), and voice notes are all answered with streamed replies. Image and voice replies can take several minutes on Pi-class hardware while the multimodal prompt is processed.
 
 ## Architecture
 
-See [`CLAUDE.md`](CLAUDE.md) for the full module breakdown. Code is split into `bot.py` (Telegram wiring) plus dedicated modules for `llm`, `vocab`, `prompts`, `config_flow`, `scheduler`, and `db`. SQLite (`data/vocab.db`) holds per-chat settings, vocabulary + FSRS state, and push history.
+See [`CLAUDE.md`](CLAUDE.md) for the full module breakdown. The code is split into `bot.py` (Telegram wiring) plus dedicated modules for `llm` (llama.cpp client), `media` (multimodal content + ffmpeg), `transcripts` (per-chat conversation files), and `sysinfo` (host diagnostics).

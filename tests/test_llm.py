@@ -1,4 +1,4 @@
-"""Tests for llm.py parse helpers and bench (no network)."""
+"""Tests for llm.py parse helpers, modalities formatter, and bench (no network)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ def test_sse_delta_returns_none_on_non_data_line() -> None:
 
 
 def test_sse_delta_tolerates_empty_delta() -> None:
-    # Some llama.cpp builds emit {"delta":{}} for the opening chunk.
     line = 'data: {"choices":[{"delta":{}}]}'
     assert llm._parse_sse_delta(line) is None
 
@@ -40,6 +39,19 @@ def test_parse_completion_returns_content() -> None:
 def test_parse_completion_missing_content_returns_empty() -> None:
     payload = {"choices": [{"message": {}}]}
     assert llm._parse_completion(payload) == ""
+
+
+def test_format_modalities_text_only() -> None:
+    assert llm._format_modalities({"vision": False, "audio": False}) == "text"
+
+
+def test_format_modalities_vision_audio() -> None:
+    assert llm._format_modalities({"vision": True, "audio": True}) == "text+vision+audio"
+
+
+def test_format_modalities_handles_missing_dict() -> None:
+    assert llm._format_modalities(None) == "text"
+    assert llm._format_modalities({}) == "text"
 
 
 def test_bench_formats_chars_elapsed_and_rate() -> None:
