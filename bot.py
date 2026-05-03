@@ -73,8 +73,10 @@ logging.basicConfig(
     ],
 )
 # httpx/telegram INFO logs leak the bot token in request URLs.
+# apscheduler comes in via PTB's JobQueue and emits a noisy "Scheduler started".
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 histories: dict[int, list[dict]] = {}
